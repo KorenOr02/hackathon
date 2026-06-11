@@ -8,7 +8,7 @@ export function DetectionAlert({ onStart, started, starting, callMessage }: { on
         <div>
           <span className="eyebrow light">זוהתה חריגה</span>
           <h2>זוהתה עליית מחיר</h2>
-          <p>Swaper זיהתה שחבילת הסלולר שלך בסלקום עלתה מ־₪100 ל־₪150 בחודש. הסוכן יברר את הסיבה מול סלקום, ינהל משא ומתן, יבדוק מתחרים וישלח לך את כל ההצעות ב-WhatsApp.</p>
+          <p>Swaper זיהתה שחבילת הסלולר שלך בסלקום עלתה מ־₪100 ל־₪150 בחודש. הסוכן יבקש להחזיר את המחיר ל־₪100 או פחות, יוודא את המחיר פעם אחת וישלח את התוצאה ב-SMS.</p>
           <button className="primary-btn" onClick={onStart} disabled={started || starting}>{starting ? "יוצר שיחות לספקים..." : started ? "המשא ומתן מול הספקים בתהליך" : "הפעלת סוכן המשא ומתן"}<ArrowIcon /></button>
           {callMessage && <p className={`call-status-message ${started ? "success" : "error"}`}>{callMessage}</p>}
         </div>

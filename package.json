@@ -6,10 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "dial:check": "node --env-file-if-exists=.env.local scripts/check-dial.mjs"
   },
   "dependencies": {
-    "@getdial/sdk": "^0.6.3",
+    "@getdial/sdk": "^0.6.4",
     "next": "^15.2.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

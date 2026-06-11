@@ -3,11 +3,11 @@
 import { CheckIcon, PhoneIcon, SparkIcon } from "./icons";
 
 const steps = [
-  { label: "מתקשר למחלקת שימור הלקוחות של סלקום", result: "סלקום הציעה ₪109 בחודש", icon: PhoneIcon },
-  { label: "בודק הצעה חלופית מפרטנר", result: "פרטנר הציעה ₪99 בחודש, כולל 200GB", icon: PhoneIcon },
-  { label: "בודק הצעה חלופית מפלאפון", result: "פלאפון הציעה ₪95 בחודש, כולל 300GB", icon: PhoneIcon },
-  { label: "משווה בין ההצעות", result: "ההצעה הטובה ביותר: פלאפון, ₪95 בחודש", icon: SparkIcon },
-  { label: "שולח סיכום הצעות ללקוח ב-WhatsApp", result: "הסיכום נשלח ללקוח. לא בוצע מעבר ספק.", icon: PhoneIcon },
+  { label: "מבקש מסלקום להחזיר את המחיר ל-₪100 או פחות", result: "שיחת הספק הסתיימה", icon: PhoneIcon },
+  { label: "מבקש מפרטנר מחיר של ₪100 או פחות", result: "שיחת הספק הסתיימה", icon: PhoneIcon },
+  { label: "מבקש מפלאפון מחיר של ₪100 או פחות", result: "שיחת הספק הסתיימה", icon: PhoneIcon },
+  { label: "אוסף את המחירים הסופיים", result: "המחירים הסופיים התקבלו מ-Dial", icon: SparkIcon },
+  { label: "שולח סיכום הצעות ללקוח ב-SMS", result: "שלב הסיכום הסתיים. לא בוצע מעבר ספק.", icon: PhoneIcon },
 ];
 
 export function NegotiationTimeline({ activeStep, complete, summarySent }: { activeStep: number; complete: boolean; summarySent: boolean }) {

@@ -15,26 +15,32 @@ export interface ProviderCallResult {
   state: string;
 }
 
-const sharedTestPhoneNumber = process.env.DIAL_TEST_PROVIDER_NUMBER || "+972558838259";
+export interface ProviderCallReference {
+  provider: string;
+  callId: string;
+}
+
+const sharedTestPhoneNumber = process.env.DIAL_TEST_PROVIDER_NUMBER;
+const e164PhoneNumberPattern = /^\+[1-9]\d{7,14}$/;
 
 export const providers: ProviderConfig[] = [
   {
     key: "cellcom",
     name: "סלקום",
-    phoneNumber: process.env.CELLCOM_PHONE_NUMBER || sharedTestPhoneNumber,
-    goal: "בררי מדוע המחיר עלה מ-100 ש״ח ל-150 ש״ח בחודש, ובקשי הצעת שימור של 100 ש״ח או פחות.",
+    phoneNumber: sharedTestPhoneNumber || process.env.CELLCOM_PHONE_NUMBER,
+    goal: "בקשי להחזיר את המחיר החודשי מ-150 ש״ח ל-100 ש״ח או פחות.",
   },
   {
     key: "partner",
     name: "פרטנר",
-    phoneNumber: process.env.PARTNER_PHONE_NUMBER || sharedTestPhoneNumber,
-    goal: "בקשי הצעה מתחרה לחבילת סלולר, כולל מחיר, נפח גלישה, התחייבות וכל עמלה נוספת.",
+    phoneNumber: sharedTestPhoneNumber || process.env.PARTNER_PHONE_NUMBER,
+    goal: "בקשי מחיר חודשי של 100 ש״ח או פחות.",
   },
   {
     key: "pelephone",
     name: "פלאפון",
-    phoneNumber: process.env.PELEPHONE_PHONE_NUMBER || sharedTestPhoneNumber,
-    goal: "בקשי הצעה מתחרה לחבילת סלולר, כולל מחיר, נפח גלישה, התחייבות וכל עמלה נוספת.",
+    phoneNumber: sharedTestPhoneNumber || process.env.PELEPHONE_PHONE_NUMBER,
+    goal: "בקשי מחיר חודשי של 100 ש״ח או פחות.",
   },
 ];
 
@@ -49,73 +55,92 @@ export function getDialClient() {
 }
 
 export async function getFromNumberId(dial: DialClient) {
-  const fromNumberId = process.env.DIAL_FROM_NUMBER_ID || (await dial.listNumbers())[0]?.id;
+  const numbers = await dial.listNumbers();
+  const configuredNumberId = process.env.DIAL_FROM_NUMBER_ID;
+  const fromNumberId = configuredNumberId || numbers[0]?.id;
   if (!fromNumberId) throw new Error("DIAL_CONFIG_MISSING: לא נמצא מספר Dial יוצא.");
+  if (configuredNumberId && !numbers.some((number) => number.id === configuredNumberId)) {
+    throw new Error("DIAL_CONFIG_MISSING: המספר שהוגדר ב-DIAL_FROM_NUMBER_ID אינו קיים בחשבון Dial.");
+  }
   return fromNumberId;
+}
+
+export function getConfiguredProviders() {
+  return providers.filter((provider) => provider.phoneNumber);
+}
+
+export function getMissingProviders() {
+  return providers.filter((provider) => !provider.phoneNumber).map((provider) => provider.name);
+}
+
+export function assertE164PhoneNumber(phoneNumber: string, label: string) {
+  if (!e164PhoneNumberPattern.test(phoneNumber)) {
+    throw new Error(`DIAL_CONFIG_MISSING: המספר עבור ${label} חייב להיות בפורמט E.164, לדוגמה +972501234567.`);
+  }
 }
 
 export function createProviderPrompt(provider: ProviderConfig) {
   const providerSpecificContext = provider.key === "cellcom"
-    ? "זו שיחת בירור ושימור מול הספק הנוכחי. התמקדי בסיבת עליית המחיר ובקבלת הנחת שימור."
-    : `זו שיחת בדיקת הצעה חדשה מול ${provider.name}, מתחרה של הספק הנוכחי סלקום. אל תדברי כאילו הלקוח כבר מנוי אצל ${provider.name}.`;
+    ? "זו שיחת שימור קצרה מול הספק הנוכחי."
+    : `זו שיחת בקשת מחיר קצרה מול ${provider.name}. אל תדברי כאילו הלקוח כבר מנוי אצלם.`;
 
   return `
 את סוכנת המשא ומתן של Swaper, עוזרת פיננסית יוזמת מבוססת AI.
-בתחילת השיחה הציגי את עצמך בבירור כסוכנת AI של Swaper שמתקשרת בשם לקוח לצורך בירור והשגת הצעת מחיר.
+בתחילת השיחה הציגי את עצמך במשפט אחד כסוכנת AI של Swaper שמתקשרת בשם לקוח כדי להוריד את המחיר החודשי.
 
 את מתקשרת אל ${provider.name}.
 ${providerSpecificContext}
 מטרת השיחה: ${provider.goal}
 
-בכל הצעה שאלי:
-- מה המחיר החודשי הסופי?
-- כמה נפח גלישה כלול?
-- האם קיימת התחייבות?
-- האם יש דמי SIM, דמי מעבר או עמלות נסתרות?
-- לכמה זמן המחיר מובטח?
-
-כללי מניעת לולאה וסיום שיחה — חובה:
-- השיחה מוגבלת לעד 8 תגובות שלך. לאחר מכן סכמי וסיימי, גם אם לא התקבלה הצעה מלאה.
-- שאלי כל שאלה פעם אחת בלבד. אסור לחזור על אותה שאלה בניסוח אחר.
-- אם תשובה לא ברורה, מותר לבקש הבהרה פעם אחת בלבד. לאחר מכן רשמי שהפרט לא נמסר והמשיכי.
-- מותר להציע הצעת נגד פעם אחת בלבד. אם היא נדחית, קבלי את ההצעה האחרונה וסיימי.
-- אם הנציג מסר מחיר, נפח גלישה, התחייבות ועמלות — יש מספיק מידע. סכמי וסיימי מיד.
-- אם הנציג מסרב, מבקש להפסיק, אומר שזה מספר שגוי, או שאין התקדמות במשך שתי תגובות — התנצלי וסיימי מיד.
-- אם יש שקט, מערכת אוטומטית או המתנה ללא מענה, אל תחזרי שוב ושוב על הפתיח. נסי פעם נוספת אחת בלבד ואז סיימי.
-- לעולם אל תתחילי מחדש את השיחה, אל תחזרי על ההצגה העצמית ואל תחזרי על מטרת השיחה.
+כללי שיחה — חובה:
+- השיחה צריכה להיות קצרה מאוד, ישירה וממוקדת רק במחיר החודשי.
+- אל תשאלי על פרטי החבילה, גלישה, התחייבות, עמלות, הטבות או שום נושא אחר.
+- בקשי פעם אחת מחיר של 100 ש״ח או פחות.
+- אם המחיר לא מאושר מיד, מותר לבקש פעם אחת נוספת בלבד להוריד ל-100 ש״ח או פחות.
+- אם הוצע מחיר של 100 ש״ח או פחות, ודאי אותו פעם אחת בלבד בשאלה: "רק לוודא, המחיר החודשי החדש הוא [המחיר], נכון?"
+- לאחר שהמחיר אומת, אל תשאלי שום שאלה נוספת וסיימי מיד.
+- אם ההורדה נדחית או שהמחיר נשאר מעל 100 ש״ח לאחר הבקשה הנוספת, קבלי את התשובה וסיימי מיד.
+- השיחה מוגבלת לעד 4 תגובות שלך.
+- אל תחזרי על ההצגה העצמית או על אותה בקשה יותר מפעמיים.
+- לפני משפט הסיום, אמרי שורת סיכום אחת בדיוק בפורמט:
+  "הצעה סופית: מחיר חודשי [המחיר שאומת, או לא הושגה הנחה]."
 - משפט הסיום שלך צריך להיות: "תודה רבה, אעביר את ההצעה ללקוח לבדיקה. יום טוב." לאחר משפט זה אל תשאלי שאלה נוספת וסיימי את השיחה.
 
 כללי בטיחות:
 - אל תבצעי מעבר ספק, ביטול או רכישה.
 - אל תאשרי עסקה ואל תתחייבי בשם הלקוח.
-- הסבירי שכל הצעה תוצג ללקוח ותדרוש את אישורו.
-- בסיום חזרי בקצרה על ההצעה שקיבלת.
 - שמרי על שיחה מקצועית, קצרה וידידותית בעברית.
 `.trim();
 }
 
-export function summarizeCalls(calls: Call[]) {
-  return calls.map((call) => ({
+export function summarizeCalls(calls: Array<{ call: Call; provider: string }>) {
+  return calls.map(({ call, provider }) => ({
     callId: call.id,
-    provider: providers.find((provider) => provider.phoneNumber === call.to)?.name || call.to,
+    provider,
     state: call.status.state,
+    terminationType: call.status.terminationType,
     transcript: call.transcript,
   }));
 }
 
 export function buildCustomerSummary(calls: ReturnType<typeof summarizeCalls>) {
   const offers = calls.map((call) => {
-    const result = call.transcript?.trim()
-      ? call.transcript.trim()
-      : `השיחה הסתיימה בסטטוס ${call.state}, אך עדיין אין תמלול זמין.`;
-    return `*${call.provider}:*\n${result}`;
+    const transcript = call.transcript?.trim();
+    const finalOffers = transcript
+      ? [...transcript.matchAll(/הצעה סופית:\s*([\s\S]*?)(?=\r?\n|תודה רבה|$)/g)]
+      : [];
+    const finalOffer = finalOffers.at(-1)?.[0]?.trim();
+    const result = finalOffer
+      ? finalOffer
+      : transcript
+        ? "לא זוהתה שורת הצעה סופית בתמלול."
+        : `לא התקבלה הצעה. השיחה הסתיימה בסטטוס ${call.state}.`;
+    return `${call.provider}: ${result}`;
   });
 
   return [
-    "סיכום משא ומתן של Swaper:",
-    "",
+    "המחירים הסופיים של Swaper:",
     ...offers,
-    "",
-    "Swaper לא ביצעה מעבר ספק או רכישה. יש לבדוק את ההצעות ולאשר כל פעולה באופן מפורש.",
+    "לא בוצע מעבר ספק או רכישה.",
   ].join("\n");
 }
