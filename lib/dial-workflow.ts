@@ -1,4 +1,4 @@
-import { DialClient, type Call } from "@getdial/sdk";
+import { DialClient, type Call, type CallState, type TerminationType } from "@getdial/sdk";
 
 export type ProviderKey = "cellcom" | "partner" | "pelephone";
 
@@ -18,6 +18,24 @@ export interface ProviderCallResult {
 export interface ProviderCallReference {
   provider: string;
   callId: string;
+}
+
+export type OfferConfidence = "verified" | "detected" | "none";
+export type ProviderLifecycle = "waiting" | "queued" | "ringing" | "in-progress" | "analyzing" | "completed" | "no-answer" | "busy" | "failed";
+export interface ProviderWorkflowResult {
+  providerKey: ProviderKey; provider: string; callId: string | null; lifecycle: ProviderLifecycle;
+  state: CallState | "Waiting"; terminationType: TerminationType | null; price: number | null;
+  confidence: OfferConfidence; reason: string; retryable: boolean;
+}
+export interface WorkflowStatus {
+  workflowId: string; testMode: boolean; providers: ProviderWorkflowResult[]; allFinished: boolean;
+  summarySent: boolean; summaryMessage: string;
+}
+
+export class DialWorkflowError extends Error {
+  constructor(public code: "quota_exceeded" | "call_failed", message: string, public status: number) {
+    super(message);
+  }
 }
 
 const sharedTestPhoneNumber = process.env.DIAL_TEST_PROVIDER_NUMBER;
@@ -79,37 +97,43 @@ export function assertE164PhoneNumber(phoneNumber: string, label: string) {
   }
 }
 
+export function normalizeDialCallError(error: unknown) {
+  const message = error instanceof Error ? error.message : "";
+  if (message.includes('"code":"quota_exceeded"') || message.includes("Outbound call quota reached")) {
+    return new DialWorkflowError(
+      "quota_exceeded",
+      "מכסת השיחות היוצאות בחשבון Dial נוצלה במלואה (50/50). יש להגדיל או לאפס את המכסה ב-Dial לפני שניתן להוציא שיחה.",
+      402,
+    );
+  }
+  return new DialWorkflowError("call_failed", "Dial לא הצליחה ליצור את השיחה היוצאת.", 502);
+}
+
 export function createProviderPrompt(provider: ProviderConfig) {
   const providerSpecificContext = provider.key === "cellcom"
-    ? "זו שיחת שימור קצרה מול הספק הנוכחי."
-    : `זו שיחת בקשת מחיר קצרה מול ${provider.name}. אל תדברי כאילו הלקוח כבר מנוי אצלם.`;
+    ? "סלקום היא חברת הסלולר הנוכחית של הלקוח. המחיר שלו עלה מ-100 ש״ח ל-150 ש״ח בחודש."
+    : `את מתקשרת אל ${provider.name} בשם לקוח שמחיר הסלולר שלו התייקר מ-100 ש״ח ל-150 ש״ח בחודש, כדי לקבל הצעה חלופית זולה יותר.`;
 
   return `
-את סוכנת המשא ומתן של Swaper, עוזרת פיננסית יוזמת מבוססת AI.
-בתחילת השיחה הציגי את עצמך במשפט אחד כסוכנת AI של Swaper שמתקשרת בשם לקוח כדי להוריד את המחיר החודשי.
-
-את מתקשרת אל ${provider.name}.
+את נציגת Swaper ומתקשרת אל ${provider.name} בשם לקוח כדי להוריד עבורו את מחיר הסלולר החודשי.
 ${providerSpecificContext}
-מטרת השיחה: ${provider.goal}
 
-כללי שיחה — חובה:
-- השיחה צריכה להיות קצרה מאוד, ישירה וממוקדת רק במחיר החודשי.
-- אל תשאלי על פרטי החבילה, גלישה, התחייבות, עמלות, הטבות או שום נושא אחר.
-- בקשי פעם אחת מחיר של 100 ש״ח או פחות.
-- אם המחיר לא מאושר מיד, מותר לבקש פעם אחת נוספת בלבד להוריד ל-100 ש״ח או פחות.
-- אם הוצע מחיר של 100 ש״ח או פחות, ודאי אותו פעם אחת בלבד בשאלה: "רק לוודא, המחיר החודשי החדש הוא [המחיר], נכון?"
-- לאחר שהמחיר אומת, אל תשאלי שום שאלה נוספת וסיימי מיד.
-- אם ההורדה נדחית או שהמחיר נשאר מעל 100 ש״ח לאחר הבקשה הנוספת, קבלי את התשובה וסיימי מיד.
-- השיחה מוגבלת לעד 4 תגובות שלך.
-- אל תחזרי על ההצגה העצמית או על אותה בקשה יותר מפעמיים.
-- לפני משפט הסיום, אמרי שורת סיכום אחת בדיוק בפורמט:
-  "הצעה סופית: מחיר חודשי [המחיר שאומת, או לא הושגה הנחה]."
-- משפט הסיום שלך צריך להיות: "תודה רבה, אעביר את ההצעה ללקוח לבדיקה. יום טוב." לאחר משפט זה אל תשאלי שאלה נוספת וסיימי את השיחה.
+המטרה היחידה שלך היא להשיג מחיר חודשי של 100 ש״ח או פחות. אל תנהלי שיחה על פרטי החבילה ואל תבצעי רכישה, מעבר ספק או התחייבות.
 
-כללי בטיחות:
-- אל תבצעי מעבר ספק, ביטול או רכישה.
-- אל תאשרי עסקה ואל תתחייבי בשם הלקוח.
-- שמרי על שיחה מקצועית, קצרה וידידותית בעברית.
+מיד כשהשיחה מתחברת, אל תישארי בשקט. אמרי פעם אחת בלבד:
+"שלום, אני נציגת Swaper ומתקשרת בשם לקוח שהמחיר החודשי שלו התייקר. הלקוח שילם 100 ש״ח והמחיר עלה ל-150 ש״ח. אפשר להחזיר את המחיר ל-100 ש״ח או פחות?"
+
+אם במקום אדם את שומעת הוראת תפריט ברורה כמו "לשירות לקוחות הקש 1", הפסיקי לדבר, האזיני לאפשרויות והקישי באמצעות DTMF את האפשרות שמובילה לשימור לקוחות או לשירות לקוחות. לאחר החיבור לנציג, אל תחזרי על ההצגה המלאה; אמרי רק: "אני מתקשרת בשם לקוח שהמחיר שלו התייקר. אפשר להחזיר אותו ל-100 ש״ח או פחות?"
+
+המשך השיחה:
+1. לאחר משפט הפתיחה, המתיני לתשובה והקשיבי.
+2. אם המחיר גבוה מ-100 ש״ח, בקשי פעם אחת בלבד מחיר נמוך יותר.
+3. כשנאמר מחיר ברור, ודאי אותו פעם אחת: "רק לוודא, המחיר החודשי הוא [המחיר], נכון?"
+4. לאחר האישור אמרי: "הצעה סופית: מחיר חודשי [המחיר]." הודי וסיימי.
+
+דברי באופן טבעי, קצר וענייני. אל תחזרי על ההצגה העצמית או על משפט שכבר אמרת. אם קטעו אותך או שהיה רעש, הקשיבי והמשיכי בלי להתחיל מחדש. אם הנציג מבקש להמתין, המתיני. אם לא ניתן לקבל מחיר, אמרי: "הצעה סופית: לא הושגה הנחה." וסיימי.
+
+אל תמסרי מספר זהות, פרטי אשראי, סיסמה או מידע אישי.
 `.trim();
 }
 
@@ -123,24 +147,45 @@ export function summarizeCalls(calls: Array<{ call: Call; provider: string }>) {
   }));
 }
 
-export function buildCustomerSummary(calls: ReturnType<typeof summarizeCalls>) {
-  const offers = calls.map((call) => {
-    const transcript = call.transcript?.trim();
-    const finalOffers = transcript
-      ? [...transcript.matchAll(/הצעה סופית:\s*([\s\S]*?)(?=\r?\n|תודה רבה|$)/g)]
-      : [];
-    const finalOffer = finalOffers.at(-1)?.[0]?.trim();
-    const result = finalOffer
-      ? finalOffer
-      : transcript
-        ? "לא זוהתה שורת הצעה סופית בתמלול."
-        : `לא התקבלה הצעה. השיחה הסתיימה בסטטוס ${call.state}.`;
-    return `${call.provider}: ${result}`;
-  });
+function extractPrice(text: string) {
+  const matches = [...text.matchAll(/(?:₪\s*)?(\d{2,4})(?:\s*(?:ש["״']?ח|שקל(?:ים)?))?/g)]
+    .map((match) => Number(match[1])).filter((price) => price >= 10 && price <= 2_000);
+  return matches.at(-1) ?? null;
+}
 
-  return [
-    "המחירים הסופיים של Swaper:",
-    ...offers,
-    "לא בוצע מעבר ספק או רכישה.",
-  ].join("\n");
+export function analyzeCall(provider: ProviderConfig, call: Call): ProviderWorkflowResult {
+  const transcript = call.transcript?.trim() || "";
+  const terminationType = call.status.terminationType;
+  const base = { providerKey: provider.key, provider: provider.name, callId: call.id, state: call.status.state, terminationType };
+  if (call.status.state !== "Terminated") {
+    const lifecycle = call.status.state === "Queued" ? "queued" : call.status.state === "Ringing" ? "ringing" : "in-progress";
+    const reason = lifecycle === "queued" ? "השיחה ממתינה לחיוג" : lifecycle === "ringing" ? "מחייגים לספק" : "השיחה מתבצעת";
+    return { ...base, lifecycle, price: null, confidence: "none", reason, retryable: false };
+  }
+  if (terminationType === "completed" && call.duration > 0 && !transcript) return { ...base, lifecycle: "analyzing", price: null, confidence: "none", reason: "מנתחים את תוצאת השיחה", retryable: false };
+  if (terminationType && terminationType !== "completed") {
+    const lifecycle = terminationType === "no-answer" ? "no-answer" : terminationType === "busy" ? "busy" : "failed";
+    const reason = terminationType === "no-answer" ? "הספק לא ענה" : terminationType === "busy" ? "הקו היה תפוס" : "השיחה לא הושלמה";
+    return { ...base, lifecycle, price: null, confidence: "none", reason, retryable: true };
+  }
+  const finalOfferLines = transcript.match(/הצעה סופית:[^\r\n]*/g) || [];
+  const verifiedPrice = extractPrice(finalOfferLines.at(-1) || "");
+  if (verifiedPrice !== null) return { ...base, lifecycle: "completed", price: verifiedPrice, confidence: "verified", reason: "המחיר אושר בשיחה", retryable: false };
+  const refusal = /לא הושגה הנחה|אין הנחה|לא ניתן|אי אפשר|מסרב/.test(transcript);
+  const offerStatements = transcript.split(/\r?\n/).filter((line) => /מציע|להציע|אפשר לתת|יכול(?:ים)? לתת|המחיר (?:הוא|יהיה)|יעלה/.test(line)).join("\n");
+  const detectedPrice = refusal ? null : extractPrice(offerStatements);
+  if (detectedPrice !== null) return { ...base, lifecycle: "completed", price: detectedPrice, confidence: "detected", reason: "המחיר הוזכר אך לא אושר במפורש", retryable: false };
+  return { ...base, lifecycle: "completed", price: null, confidence: "none", reason: refusal ? "הספק לא הציע מחיר נמוך יותר" : "לא זוהתה הצעת מחיר ברורה", retryable: false };
+}
+
+export function waitingProviderResult(provider: ProviderConfig): ProviderWorkflowResult {
+  return { providerKey: provider.key, provider: provider.name, callId: null, lifecycle: "waiting", state: "Waiting", terminationType: null, price: null, confidence: "none", reason: "ממתינה לתורה", retryable: false };
+}
+
+export function buildCustomerSummary(results: ProviderWorkflowResult[]) {
+  const offers = results.map((result) => result.price === null
+    ? `${result.provider}: ${result.reason}`
+    : `${result.provider}: ${result.price} ש"ח, ${result.confidence === "verified" ? "המחיר אומת" : "המחיר זוהה אך לא אומת"}`);
+  const bestVerified = results.filter((result) => result.price !== null && result.confidence === "verified").sort((a, b) => a.price! - b.price!)[0];
+  return ["Swaper סיים להשוות עבורך:", ...offers, "", bestVerified ? `ההצעה הטובה ביותר שאומתה: ${bestVerified.provider}, ${bestVerified.price} ש"ח` : "לא התקבלה הצעה מאומתת.", "לא בוצע מעבר ספק או רכישה."].join("\n");
 }

@@ -1,22 +1,27 @@
 import { AlertIcon, ArrowIcon } from "./icons";
 
-export function DetectionAlert({ onStart, started, starting, callMessage }: { onStart: () => void; started: boolean; starting: boolean; callMessage: string }) {
+export function DetectionAlert({ onStart, started, starting, callMessage, isError }: { onStart: () => void; started: boolean; starting: boolean; callMessage: string; isError: boolean }) {
   return (
-    <section className="detection">
-      <div className="detection-main">
-        <span className="alert-icon"><AlertIcon /></span>
-        <div>
-          <span className="eyebrow light">זוהתה חריגה</span>
-          <h2>זוהתה עליית מחיר</h2>
-          <p>Swaper זיהתה שחבילת הסלולר שלך בסלקום עלתה מ־₪100 ל־₪150 בחודש. הסוכן יבקש להחזיר את המחיר ל־₪100 או פחות, יוודא את המחיר פעם אחת וישלח את התוצאה ב-SMS.</p>
-          <button className="primary-btn" onClick={onStart} disabled={started || starting}>{starting ? "יוצר שיחות לספקים..." : started ? "המשא ומתן מול הספקים בתהליך" : "הפעלת סוכן המשא ומתן"}<ArrowIcon /></button>
-          {callMessage && <p className={`call-status-message ${started ? "success" : "error"}`}>{callMessage}</p>}
-        </div>
+    <section className="savings-hero">
+      <div className="savings-hero-copy">
+        <span className="savings-alert"><AlertIcon />התייקרות חדשה</span>
+        <h2>חשבון הסלולר עלה ב־<em>₪50</em></h2>
+        <p>Swaper תתקשר לסלקום, פרטנר ופלאפון ותבקש מחיר של ₪100 או פחות.</p>
+        <button className="primary-btn savings-cta" onClick={onStart} disabled={started || starting}>
+          {starting ? "פותחת שלוש שיחות..." : started ? "Swaper מטפלת בזה" : "מצאו לי מחיר טוב יותר"}
+          <ArrowIcon />
+        </button>
+        <span className="savings-helper">במצב הבדיקה תתבצע שיחה אחת בלבד · ניווט אוטומטי במענה הקולי</span>
+        {callMessage && <p className={`call-status-message ${isError ? "error" : "success"}`}>{callMessage}</p>}
       </div>
-      <div className="detection-stats">
-        <div><span>ספק</span><strong>סלקום</strong></div><div><span>קטגוריה</span><strong>סלולר</strong></div>
-        <div><span>מחיר קודם</span><strong>₪100</strong></div><div><span>מחיר נוכחי</span><strong>₪150</strong></div>
-        <div><span>עלייה</span><strong>50%</strong></div><div><span>השפעה שנתית</span><strong>₪600</strong></div>
+      <div className="price-change-card">
+        <div className="provider-chip"><span>ס</span><div><small>המנוי הנוכחי</small><strong>סלקום</strong></div></div>
+        <div className="price-change">
+          <div><small>היה</small><strong>₪100</strong></div>
+          <span className="price-arrow">←</span>
+          <div className="current-price"><small>עכשיו</small><strong>₪150</strong></div>
+        </div>
+        <div className="annual-impact"><span>תוספת שנתית</span><strong>₪600</strong></div>
       </div>
     </section>
   );

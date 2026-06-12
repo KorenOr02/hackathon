@@ -55,6 +55,7 @@ try {
   console.log(process.env.CUSTOMER_SUMMARY_NUMBER
     ? "SMS summary destination is configured."
     : "SMS summary destination is not configured; calls can still run.");
+  console.log("Note: this check validates credentials, numbers, and destinations. Dial only reports outbound quota when a call is created.");
 } catch (error) {
   console.error(error instanceof Error ? error.message : "Dial connection check failed.");
   process.exit(1);

@@ -40,6 +40,10 @@ but the final SMS summary is skipped.
 After all calls terminate, Swaper extracts each provider's final-offer line and
 sends the concise final offers to `CUSTOMER_SUMMARY_NUMBER`.
 
+The outbound instruction tells Dial's voice agent to navigate IVR menus using
+DTMF keypad presses, preferring retention, customer service, or billing, before
+starting the short price negotiation with a human representative.
+
 ## Safety
 
 - No real banking integration.

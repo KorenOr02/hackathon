@@ -1,36 +1,37 @@
-"use client";
+import type { ProviderKey, ProviderLifecycle, WorkflowStatus } from "@/lib/dial-workflow";
+import { CheckIcon, PhoneIcon } from "./icons";
 
-import { CheckIcon, PhoneIcon, SparkIcon } from "./icons";
+const providerMeta: Record<ProviderKey, { type: string; letter: string }> = {
+  cellcom: { type: "שימור", letter: "ס" },
+  partner: { type: "הצעה חדשה", letter: "פ" },
+  pelephone: { type: "הצעה חדשה", letter: "פ" },
+};
+const labels: Record<ProviderLifecycle, string> = {
+  waiting: "ממתינה לתורה", queued: "מתכוננים לשיחה", ringing: "מחייגים לספק",
+  "in-progress": "השיחה מתבצעת", analyzing: "מנתחים את התוצאה", completed: "התקבלה תוצאה",
+  "no-answer": "לא התקבלה תשובה", busy: "הקו היה תפוס", failed: "השיחה נכשלה",
+};
 
-const steps = [
-  { label: "מבקש מסלקום להחזיר את המחיר ל-₪100 או פחות", result: "שיחת הספק הסתיימה", icon: PhoneIcon },
-  { label: "מבקש מפרטנר מחיר של ₪100 או פחות", result: "שיחת הספק הסתיימה", icon: PhoneIcon },
-  { label: "מבקש מפלאפון מחיר של ₪100 או פחות", result: "שיחת הספק הסתיימה", icon: PhoneIcon },
-  { label: "אוסף את המחירים הסופיים", result: "המחירים הסופיים התקבלו מ-Dial", icon: SparkIcon },
-  { label: "שולח סיכום הצעות ללקוח ב-SMS", result: "שלב הסיכום הסתיים. לא בוצע מעבר ספק.", icon: PhoneIcon },
-];
-
-export function NegotiationTimeline({ activeStep, complete, summarySent }: { activeStep: number; complete: boolean; summarySent: boolean }) {
-  const progress = complete ? 100 : Math.max(8, ((activeStep + 0.45) / steps.length) * 100);
+export function NegotiationTimeline({ workflow, onRetry, retrying }: {
+  workflow: WorkflowStatus; onRetry: (providerKey: ProviderKey) => void; retrying: ProviderKey | null;
+}) {
+  const finished = workflow.providers.filter((provider) => ["completed", "no-answer", "busy", "failed"].includes(provider.lifecycle)).length;
   return (
-    <section className="surface timeline-section">
-      <div className="section-heading">
-        <div><span className="eyebrow">סוכן משא ומתן מבוסס AI</span><h2>{complete ? summarySent ? "ההשוואה והסיכום הושלמו" : "השיחות הסתיימו, הסיכום טרם נשלח" : activeStep === 4 ? "ממתין לתוצאות ושולח סיכום" : "מנהל משא ומתן מול הספקים"}</h2></div>
-        <span className={`agent-state ${complete && summarySent ? "done" : ""}`}>{summarySent ? "נשלח ללקוח" : complete ? "נדרשת הגדרה" : "הסוכן עובד"}</span>
+    <section className="calls-section">
+      <div className="calls-heading">
+        <div><span className="bank-kicker">{workflow.allFinished ? "ההשוואה הסתיימה" : "Swaper עובדת בשבילך"}</span><h2>{workflow.allFinished ? "התוצאות מוכנות" : workflow.testMode ? "מבצעת שיחת בדיקה אחת" : "בודקת שלושה ספקים"}</h2></div>
+        <span className={`calls-status ${workflow.allFinished ? "done" : ""}`}>{finished} מתוך {workflow.providers.length} הסתיימו</span>
       </div>
-      <div className="progress-track"><span style={{ width: `${progress}%` }} /></div>
-      <div className="timeline">
-        {steps.map((step, index) => {
-          const done = complete || index < activeStep;
-          const active = !complete && index === activeStep;
-          const Icon = step.icon;
-          return (
-            <div className={`timeline-item ${done ? "is-done" : ""} ${active ? "is-active" : ""}`} key={step.label}>
-              <span className="timeline-icon">{done ? <CheckIcon /> : <Icon />}</span>
-              <div><strong>{step.label}{active ? "..." : ""}</strong>{done && <p>{step.result}</p>}{active && <p className="working">יוצר קשר עם הספק ובוחן את תנאי ההצעה</p>}</div>
-              <span className="step-number">0{index + 1}</span>
-            </div>
-          );
+      <div className="provider-call-grid">
+        {workflow.providers.map((provider) => {
+          const meta = providerMeta[provider.providerKey];
+          const done = ["completed", "no-answer", "busy", "failed"].includes(provider.lifecycle);
+          return <article className={`provider-call-card ${done ? "is-done" : "is-active"} lifecycle-${provider.lifecycle}`} key={provider.providerKey}>
+            <div className="provider-call-top"><span className="provider-avatar">{meta.letter}</span><span className="provider-call-icon">{done ? <CheckIcon /> : <PhoneIcon />}</span></div>
+            <div><small>{meta.type}</small><h3>{provider.provider}</h3></div>
+            <div className="provider-call-state"><i />{labels[provider.lifecycle]}</div>
+            {provider.retryable && <button className="retry-btn" onClick={() => onRetry(provider.providerKey)} disabled={retrying === provider.providerKey}>{retrying === provider.providerKey ? "מנסה שוב..." : "נסה שוב"}</button>}
+          </article>;
         })}
       </div>
     </section>
