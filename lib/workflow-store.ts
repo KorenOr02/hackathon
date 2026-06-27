@@ -33,7 +33,7 @@ export async function createWorkflow() {
   const configuredProviders = getConfiguredProviders();
   if (!configuredProviders.length) throw new Error("DIAL_CONFIG_MISSING: לא הוגדר אף מספר ספק לחיוג.");
   const testMode = Boolean(process.env.DIAL_TEST_PROVIDER_NUMBER);
-  const providersToCall = testMode ? configuredProviders.slice(0, 1) : configuredProviders;
+  const providersToCall = configuredProviders;
   const workflow: WorkflowRecord = {
     id: crypto.randomUUID(), testMode,
     runs: providersToCall.map((provider) => ({ provider, callId: null, call: null, creationError: false, initial: true })),
@@ -41,7 +41,7 @@ export async function createWorkflow() {
   };
   workflows.set(workflow.id, workflow);
   try {
-    if (workflow.testMode) await tryPlaceCall(workflow.runs[0]); else await Promise.all(workflow.runs.map(tryPlaceCall));
+    await Promise.all(workflow.runs.map(tryPlaceCall));
   } catch (error) {
     workflows.delete(workflow.id);
     throw error;
